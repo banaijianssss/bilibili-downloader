@@ -1,0 +1,19 @@
+﻿bilibili下载器 · Windows 版
+
+这个压缩包就是给 Windows 10 / 11 用的。解压后双击「启动.bat」。
+
+使用前
+1. 安装 Python 3.11 或更高版本。
+   https://www.python.org/downloads/windows/
+   安装时必须勾选 Add python.exe to PATH。
+2. 安装 FFmpeg，否则最高画质无法封装成 MP4。
+   打开 PowerShell 执行：winget install Gyan.FFmpeg
+   或把 ffmpeg.exe 放在本目录，启动脚本会自动加进 PATH。
+
+第一次双击
+脚本会创建 .venv、安装依赖，然后打开 http://127.0.0.1:8787
+关闭黑色窗口即停止。下载文件在 downloads 目录。
+
+1080P+、4K、HDR 需要大会员。在页面「账号与画质」粘贴 SESSDATA，只保存在本机 data\settings.json。
+
+请只用于个人学习，以及你已获授权保存的内容。

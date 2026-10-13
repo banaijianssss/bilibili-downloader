@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+
+# Local runtime / secrets (cookies, SESSDATA, tokens)
+data/
+*.env
+.env
+.env.*
+
+# Downloads and media
+downloads/
+*.mp4
+*.flv
+*.mkv
+*.webm
+*.m4a
+*.mp3
+
+# Local backups
+_backup_before_qr/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

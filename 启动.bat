@@ -61,25 +61,27 @@ if errorlevel 1 (
 )
 
 if exist "%~dp0ffmpeg.exe" set "PATH=%~dp0;%PATH%"
-if exist "%~dp0binfmpeg.exe" set "PATH=%~dp0bin;%PATH%"
+if exist "%~dp0bin\ffmpeg.exe" set "PATH=%~dp0bin;%PATH%"
 if not exist "%~dp0downloads" mkdir "%~dp0downloads"
 if not exist "%~dp0data" mkdir "%~dp0data"
 
 set "FFOK=0"
 where ffmpeg >nul 2>&1 && set "FFOK=1"
 if exist "%~dp0ffmpeg.exe" set "FFOK=1"
-if exist "%~dp0binfmpeg.exe" set "FFOK=1"
+if exist "%~dp0bin\ffmpeg.exe" set "FFOK=1"
 if "!FFOK!"=="0" (
   echo.
-  echo  [提示] 未检测到 FFmpeg。
-  echo         播放和解析仍可用，但最高画质无法封装成 MP4。
-  echo         安装后重新打开本脚本即可：
+  echo  [重要] 未检测到 FFmpeg！
+  echo         没有 FFmpeg 时：播放/解析仍可用，但「音视频」下载无法封装成 MP4。
+  echo         请先安装后再启动：
   echo           winget install Gyan.FFmpeg
-  echo         或把 ffmpeg.exe 放到本目录。
+  echo         或将 ffmpeg.exe 放到本目录 / bin 目录。
+  echo         安装完成后重新双击本脚本即可。
   echo.
 ) else (
   echo  [提示] 已检测到 FFmpeg，下载会自动封装 MP4。
 )
+echo  [提示] 下载队列会保存在 data\jobs.db，关闭后可继续排队任务。
 
 netstat -ano | findstr /R /C:":%PORT% .*LISTENING" >nul 2>&1
 if not errorlevel 1 (

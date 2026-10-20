@@ -36,3 +36,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Tests / lock (lock is committed for reproducibility; uncomment to ignore)
+.pytest_cache/

@@ -495,3 +495,42 @@ video { width: 100%; height: 100%; background: #000; display: block; }
 .manual { margin-top: 14px; }
 .manual summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .login-box .actions { margin-top: 0; }
+
+.batch-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+.dl-opts {
+  display: flex;
+  gap: 16px;
+  margin: 10px 0 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.dl-opts label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.job-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+button.tiny {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+.meta.err { color: var(--danger); }
+.status-dot.warn {
+  background: var(--amber);
+}
+.page-check {
+  margin-right: 4px;
+  opacity: 0.85;
+}

@@ -27,24 +27,51 @@ Windows：双击 `启动.bat`。首次会创建 `.venv`、安装依赖，并自�
 macOS / Linux：
 
 ```bash
-cd bilibili下载器
-python3 -m pip install -r requirements.txt
-python3 -m uvicorn app:app --host 0.0.0.0 --port 8787
+cd bilibili-downloader
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m uvicorn app:app --host 0.0.0.0 --port 8787
+```
+
+开发测试：
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q
 ```
 
 浏览器打开 `http://127.0.0.1:8787`。
 
-在「账号与画质」粘贴 SESSDATA，或整段 Cookie。它只写入本机 `data/settings.json`，不会上传。
+在「账号与画质」扫码登录，或粘贴 SESSDATA / 整段 Cookie。登录信息只写入本机 `data/settings.json`，不会上传。若保存了 `refresh_token`，启动时与定期会尝试自动续期 Cookie；续期失败会提示「需重新扫码」。
 
-下载文件在 `downloads/`，队列里也可直接保存。
+下载文件默认在系统「下载」目录（也可在设置里改）；任务队列持久化在 `data/jobs.db`。
 
 ## 能力
 
 - 热门发现、视频搜索、UP 搜索
 - UP 空间优先走 yt-dlp。空间接口常返回 412 时，自动退回检索并按 mid 过滤
-- BV / AV / 链接直接解析，多分 P
+- BV / AV / 链接直接解析，多分 P；支持勾选分 P / 全部下载批量入队
 - 兼容最高画质播放，以及尝试绝对最高编码
-- 最高画质下载（音视频 / 纯视频 / 纯音频）、进度、历史文件
+- 持久化下载队列（同时最多 2 个）、取消 / 失败重试、进程重启后恢复排队
+- 字幕与封面（可选，默认尽量下载）
+- SSE 实时进度（`/api/jobs/stream`），前端失败时回退轮询
+- 登录态校验与 Cookie 自动续期（官方 passport refresh）
 - 清晰度清单：分辨率、帧率、H.264 / HEVC / AV1、码率
+
+## 目录结构（简要）
+
+```
+app.py              # FastAPI 入口与 lifespan
+config.py / paths.py
+settings_store.py   # settings / history 原子写
+bili/               # HTTP 客户端、WBI、卡片
+media/              # yt-dlp 工具与代理
+jobs/               # SQLite 队列与 runner
+auth/               # 扫码登录与 refresh
+routes/             # 按域拆分的 APIRouter
+static/             # 前端
+tests/              # pytest 冒烟
+```
 
 请只用于个人学习，以及你已获授权保存的内容。遵守哔哩哔哩用户协议和著作权法。

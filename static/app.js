@@ -11,6 +11,10 @@ const state = {
   media: "muxed",
   formatId: null,
   formatLabel: "",
+  selectedPages: new Set(),
+  subs: true,
+  cover: true,
+  es: null,
 };
 
 function toast(text) {
@@ -148,6 +152,8 @@ async function openVideo(bvid, page = 1) {
   view.innerHTML = `<div class="hero"><div><h2>正在解析 ${escapeHtml(bvid)}</h2><p>yt-dlp 正在协商 DASH 分轨，通常需要几秒。</p></div></div>`;
   const data = await api(`/api/video/${bvid}?page=${page}`);
   state.video = data;
+  state.selectedPages = new Set([data.page]);
+  const multi = (data.pages || []).length > 1;
   view.innerHTML = `
     <div class="theater">
       <section class="player-shell">
@@ -168,6 +174,11 @@ async function openVideo(bvid, page = 1) {
         ${data.cookie ? "" : '<div class="notice" style="margin-top:12px">未登录。播放和下载会被限制在游客清晰度。1080P+ / 4K 请先在「账号与画质」扫码登录。</div>'}
         <div class="section-title">分 P</div>
         <div class="pages" id="pages"></div>
+        ${multi ? `<div class="batch-bar">
+          <button class="ghost" id="sel-all" type="button">全选分P</button>
+          <button class="ghost" id="sel-none" type="button">清空</button>
+          <button class="primary" id="dl-all" type="button">全部下载</button>
+        </div>` : ""}
         <div class="section-title">可用流 · 点击选择</div>
         <div class="formats" id="formats"></div>
         <div class="section-title">下载类型</div>
@@ -176,21 +187,47 @@ async function openVideo(bvid, page = 1) {
           <button type="button" class="format" data-media="video">纯视频</button>
           <button type="button" class="format" data-media="audio">纯音频</button>
         </div>
+        <div class="dl-opts">
+          <label><input type="checkbox" id="opt-cover" ${state.cover ? "checked" : ""}/> 封面</label>
+          <label><input type="checkbox" id="opt-subs" ${state.subs ? "checked" : ""}/> 字幕（若有）</label>
+        </div>
         <div class="actions">
           <button class="primary" id="dl">下载</button>
+          ${multi ? '<button class="ghost" id="dl-selected" type="button">下载勾选分P</button>' : ""}
           <button class="ghost" id="open-up">UP 空间</button>
         </div>
       </aside>
     </div>`;
   data.pages.forEach((p) => {
     const b = document.createElement("button");
-    b.className = "format" + (p.page === data.page ? " on" : "");
-    b.textContent = `P${p.page} ${p.part}`;
-    b.onclick = () => openVideo(bvid, p.page);
+    const on = p.page === data.page;
+    b.className = "format" + (on ? " on" : "");
+    b.type = "button";
+    b.dataset.page = p.page;
+    if (multi) {
+      b.innerHTML = `<span class="page-check">${state.selectedPages.has(p.page) ? "☑" : "☐"}</span> P${p.page} ${escapeHtml(p.part || "")}`;
+      b.onclick = (ev) => {
+        if (ev.shiftKey || ev.altKey) {
+          openVideo(bvid, p.page);
+          return;
+        }
+        if (state.selectedPages.has(p.page)) state.selectedPages.delete(p.page);
+        else state.selectedPages.add(p.page);
+        if (p.page !== data.page) {
+          // keep current play page; just refresh checkmarks
+          renderPageChecks();
+        } else {
+          renderPageChecks();
+        }
+      };
+      b.ondblclick = () => openVideo(bvid, p.page);
+    } else {
+      b.textContent = `P${p.page} ${p.part}`;
+      b.onclick = () => openVideo(bvid, p.page);
+    }
     $("#pages").appendChild(b);
   });
   const videoFormats = data.formats.filter((f) => f.has_video).slice(0, 10);
-  // Default to highest available stream (list is height-desc from API)
   if (videoFormats.length) {
     const keep = videoFormats.find((f) => f.format_id === state.formatId);
     const pick = keep || videoFormats[0];
@@ -227,12 +264,41 @@ async function openVideo(bvid, page = 1) {
       updateDownloadButton();
     };
   });
+  const coverEl = $("#opt-cover");
+  const subsEl = $("#opt-subs");
+  if (coverEl) coverEl.onchange = () => { state.cover = coverEl.checked; };
+  if (subsEl) subsEl.onchange = () => { state.subs = subsEl.checked; };
   updateDownloadButton();
-  $("#dl").onclick = () => downloadCurrent();
+  $("#dl").onclick = () => downloadCurrent([data.page]);
+  if ($("#dl-selected")) $("#dl-selected").onclick = () => {
+    const pages = [...state.selectedPages].sort((a, b) => a - b);
+    if (!pages.length) { toast("请先勾选分 P"); return; }
+    downloadCurrent(pages);
+  };
+  if ($("#dl-all")) $("#dl-all").onclick = () => {
+    const pages = data.pages.map((p) => p.page);
+    downloadCurrent(pages, true);
+  };
+  if ($("#sel-all")) $("#sel-all").onclick = () => {
+    data.pages.forEach((p) => state.selectedPages.add(p.page));
+    renderPageChecks();
+  };
+  if ($("#sel-none")) $("#sel-none").onclick = () => {
+    state.selectedPages.clear();
+    renderPageChecks();
+  };
   $("#open-up").onclick = () => data.mid && openUp(data.mid, data.author);
   $("#play-compat").onclick = () => startPlay("compat");
   $("#play-best").onclick = () => startPlay("best");
   startPlay("compat");
+}
+
+function renderPageChecks() {
+  document.querySelectorAll("#pages .format").forEach((b) => {
+    const p = Number(b.dataset.page);
+    const check = b.querySelector(".page-check");
+    if (check) check.textContent = state.selectedPages.has(p) ? "☑" : "☐";
+  });
 }
 
 function bindSync(video, audio) {
@@ -264,7 +330,6 @@ async function startPlay(mode) {
   video.play().catch(() => {});
 }
 
-
 function formatLabel(f) {
   if (!f) return "";
   const fps = f.fps ? Math.round(f.fps) + "帧 " : "";
@@ -285,75 +350,190 @@ function updateDownloadButton() {
   el.textContent = media === "muxed" ? `下载 ${q}` : `下载${kind} ${q}`;
 }
 
-async function downloadCurrent() {
+async function downloadCurrent(pages, allPages) {
   const data = state.video;
   const media = state.media || "muxed";
   const labels = { muxed: "音视频", video: "纯视频", audio: "纯音频" };
-  const payload = { bvid: data.bvid, page: data.page, title: data.title, media };
+  const payload = {
+    bvid: data.bvid,
+    title: data.title,
+    media,
+    subs: !!state.subs,
+    cover: !!state.cover,
+  };
+  if (allPages) {
+    payload.all_pages = true;
+    payload.pages = (data.pages || []).map((p) => p.page);
+  } else if (pages && pages.length > 1) {
+    payload.pages = pages;
+  } else {
+    payload.page = (pages && pages[0]) || data.page;
+  }
   if (media !== "audio" && state.formatId) {
     payload.format_id = state.formatId;
   }
-  const job = await api("/api/download", {
+  const result = await api("/api/download", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+  const count = result.count || 1;
   const q = media === "audio" ? "" : (state.formatLabel ? ` · ${state.formatLabel}` : "");
-  toast(`已加入${labels[media] || media}下载队列${q}`);
+  toast(count > 1
+    ? `已加入 ${count} 个${labels[media] || media}下载任务${q}`
+    : `已加入${labels[media] || media}下载队列${q}`);
   openDrawer();
-  return job;
+  return result;
+}
+
+function statusLabel(s) {
+  const map = {
+    queued: "排队中",
+    running: "准备中",
+    downloading: "下载中",
+    muxing: "封装中",
+    finishing: "收尾中",
+    done: "完成",
+    error: "失败",
+    cancelled: "已取消",
+    interrupted: "已中断",
+  };
+  return map[s] || s;
+}
+
+function renderJobsList(items, historyItems) {
+  const box = $("#jobs");
+  const list = (items || []).slice();
+  if (!list.length && !(historyItems || []).length) {
+    box.innerHTML = '<div class="empty">还没有任务。</div>';
+    return;
+  }
+  box.innerHTML = list.map((j) => {
+    const canCancel = ["queued", "running", "downloading", "muxing", "finishing"].includes(j.status);
+    const canRetry = ["error", "interrupted", "cancelled"].includes(j.status);
+    return `
+    <div class="job" data-id="${j.id}">
+      <h4>${escapeHtml(j.title)} · P${j.page}${j.media_label ? " · " + escapeHtml(j.media_label) : ""}</h4>
+      <div class="bar"><span style="width:${j.progress || 0}%"></span></div>
+      <div class="meta"><span>${statusLabel(j.status)} ${j.speed || ""} ${j.eta || ""}</span><span>${j.progress || 0}%</span></div>
+      ${j.error ? `<div class="meta err">${escapeHtml(j.error)}</div>` : ""}
+      <div class="job-actions">
+        ${j.status === "done" ? `<a href="/api/files/${j.id}">保存到本地</a>` : ""}
+        ${canCancel ? `<button class="ghost tiny" data-cancel="${j.id}" type="button">取消</button>` : ""}
+        ${canRetry ? `<button class="ghost tiny" data-retry="${j.id}" type="button">重试</button>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+  if ((historyItems || []).length) {
+    box.insertAdjacentHTML("beforeend", `<div class="section-title">历史文件</div>` + historyItems.slice(0, 8).map((h) => `
+      <div class="job"><h4>${escapeHtml(h.title)}${h.media_label ? " · " + escapeHtml(h.media_label) : ""}</h4><div class="meta"><a href="/api/files/${h.id}">${escapeHtml(h.file)}</a></div></div>
+    `).join(""));
+  }
+  box.querySelectorAll("[data-cancel]").forEach((btn) => {
+    btn.onclick = async () => {
+      try {
+        await api(`/api/jobs/${btn.dataset.cancel}/cancel`, { method: "POST" });
+        toast("已取消");
+        refreshJobs();
+      } catch (e) { toast(e.message); }
+    };
+  });
+  box.querySelectorAll("[data-retry]").forEach((btn) => {
+    btn.onclick = async () => {
+      try {
+        await api(`/api/jobs/${btn.dataset.retry}/retry`, { method: "POST" });
+        toast("已重新排队");
+        refreshJobs();
+      } catch (e) { toast(e.message); }
+    };
+  });
+}
+
+let _jobsCache = [];
+let _historyCache = [];
+
+async function refreshJobs() {
+  const [jobs, history] = await Promise.all([api("/api/jobs"), api("/api/history")]);
+  _jobsCache = jobs.items || [];
+  _historyCache = history.items || [];
+  renderJobsList(_jobsCache, _historyCache);
+}
+
+function startJobStream() {
+  stopJobStream();
+  if (!window.EventSource) {
+    state.poll = setInterval(refreshJobs, 1200);
+    return;
+  }
+  try {
+    const es = new EventSource("/api/jobs/stream");
+    state.es = es;
+    es.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        if (data.type === "snapshot") {
+          _jobsCache = data.items || [];
+          renderJobsList(_jobsCache, _historyCache);
+        } else if (data.type === "job" && data.job) {
+          const idx = _jobsCache.findIndex((j) => j.id === data.job.id);
+          if (idx >= 0) _jobsCache[idx] = data.job;
+          else _jobsCache.unshift(data.job);
+          renderJobsList(_jobsCache, _historyCache);
+        }
+      } catch (_) {}
+    };
+    es.onerror = () => {
+      stopJobStream();
+      state.poll = setInterval(refreshJobs, 1500);
+    };
+  } catch (_) {
+    state.poll = setInterval(refreshJobs, 1200);
+  }
+}
+
+function stopJobStream() {
+  if (state.es) {
+    try { state.es.close(); } catch (_) {}
+    state.es = null;
+  }
+  clearInterval(state.poll);
+  state.poll = null;
 }
 
 function openDrawer() {
   $("#drawer").classList.add("show");
   $("#drawer-back").classList.add("show");
-  refreshJobs();
-  clearInterval(state.poll);
-  state.poll = setInterval(refreshJobs, 1200);
+  refreshJobs().then(() => startJobStream());
 }
 function closeDrawer() {
   $("#drawer").classList.remove("show");
   $("#drawer-back").classList.remove("show");
-  clearInterval(state.poll);
-}
-
-async function refreshJobs() {
-  const [jobs, history] = await Promise.all([api("/api/jobs"), api("/api/history")]);
-  const box = $("#jobs");
-  const items = jobs.items.slice().reverse();
-  if (!items.length && !history.items.length) {
-    box.innerHTML = '<div class="empty">还没有任务。</div>';
-    return;
-  }
-  box.innerHTML = items.map((j) => `
-    <div class="job">
-      <h4>${escapeHtml(j.title)} · P${j.page}${j.media_label ? " · " + escapeHtml(j.media_label) : ""}</h4>
-      <div class="bar"><span style="width:${j.progress || 0}%"></span></div>
-      <div class="meta"><span>${j.status} ${j.speed || ""} ${j.eta || ""}</span><span>${j.progress || 0}%</span></div>
-      ${j.error ? `<div class="meta">${escapeHtml(j.error)}</div>` : ""}
-      ${j.status === "done" ? `<div class="meta"><a href="/api/files/${j.id}">保存到本地</a></div>` : ""}
-    </div>`).join("");
-  if (history.items.length) {
-    box.insertAdjacentHTML("beforeend", `<div class="section-title">历史文件</div>` + history.items.slice(0, 8).map((h) => `
-      <div class="job"><h4>${escapeHtml(h.title)}${h.media_label ? " · " + escapeHtml(h.media_label) : ""}</h4><div class="meta"><a href="/api/files/${h.id}">${escapeHtml(h.file)}</a></div></div>
-    `).join(""));
-  }
+  stopJobStream();
 }
 
 async function refreshAccount() {
   let profile = { logged_in: false };
   try { profile = await api("/api/login/status"); } catch (_) {}
   const on = !!profile.logged_in;
+  const expired = !!(profile.expired || profile.status === "expired");
+  const refreshed = !!(profile.refreshed || profile.status === "refreshed");
   $("#cookie-dot").classList.toggle("off", !on);
-  $("#cookie-label").textContent = on
-    ? `${profile.name}${profile.vip ? " · 大会员" : ""}`
-    : (profile.expired ? "登录已失效" : "游客画质");
+  $("#cookie-dot").classList.toggle("warn", expired);
+  if (on) {
+    $("#cookie-label").textContent = `${profile.name}${profile.vip ? " · 大会员" : ""}${refreshed ? " · 已续期" : ""}`;
+  } else if (expired) {
+    $("#cookie-label").textContent = "需重新扫码";
+  } else {
+    $("#cookie-label").textContent = "游客画质";
+  }
   const acc = $("#login-account");
   if (on) {
     acc.innerHTML = `${profile.face ? `<img alt="" src="${escapeHtml(profile.face)}" referrerpolicy="no-referrer" />` : ""}
-      <div><strong>${escapeHtml(profile.name)}</strong><div class="muted">${profile.vip ? escapeHtml(profile.vip_label || "大会员") : "普通账号"} · UID ${profile.mid}</div></div>`;
+      <div><strong>${escapeHtml(profile.name)}</strong><div class="muted">${profile.vip ? escapeHtml(profile.vip_label || "大会员") : "普通账号"} · UID ${profile.mid}${refreshed ? " · Cookie 已自动续期" : ""}</div></div>`;
+  } else if (expired) {
+    acc.innerHTML = `<div class="notice">登录已失效，需重新扫码。自动续期失败或不支持时请点击下方「扫码登录」。</div>`;
   } else {
-    acc.innerHTML = `<span class="muted">${profile.expired ? "登录已失效，请重新扫码。" : "当前未登录（游客画质）。"}</span>`;
+    acc.innerHTML = `<span class="muted">当前未登录（游客画质）。</span>`;
   }
   $("#logout").hidden = !on;
   $("#qr-login").textContent = on ? "重新扫码登录" : "扫码登录";
